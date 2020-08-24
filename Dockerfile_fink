@@ -1,0 +1,49 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+ARG base_img
+FROM $base_img
+WORKDIR /
+RUN mkdir ${SPARK_HOME}/python
+RUN apt-get install -y --no-install-recommends wget git apt-transport-https ca-certificates gnupg-agent apt-utils build-essential 
+
+COPY python/lib ${SPARK_HOME}/python/lib
+ENV PYTHONPATH ${SPARK_HOME}/python/lib/pyspark.zip:${SPARK_HOME}/python/lib/py4j-*.zip
+
+# Install Python
+WORKDIR /home/anaconda3
+
+# Use python3.7
+# TODO: try updating to python3.8 in the CI
+RUN wget https://repo.continuum.io/miniconda/Miniconda3-py37_4.8.2-Linux-x86_64.sh -O miniconda.sh \
+ && bash /home/anaconda3/miniconda.sh -b -p /home/anaconda3/miniconda
+
+ENV PATH /home/anaconda3/miniconda/bin:$PATH
+
+WORKDIR /home
+RUN git clone https://github.com/astrolabsoftware/fink-broker.git
+
+WORKDIR /home/fink-broker
+RUN pip install --upgrade pip setuptools wheel \
+  && pip install -r requirements.txt
+
+ENV FINK_HOME /home/fink-broker
+ENV PYTHONPATH $FINK_HOME:$PYTHONPATH
+ENV PATH $FINK_HOME/bin:$PATH
+
+WORKDIR /opt/spark/work-dir
+ENTRYPOINT [ "/opt/entrypoint.sh" ]
