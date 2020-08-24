@@ -1,7 +1,9 @@
 # Fink kubernetes
 
 Dockerfile_fink_base --> kubernetes/spark
+
 Dockerfile_fink --> kubernetes/spark/bindings/python
+
 docker-image-tool-fink.sh -> bin/
 
 ## with minikube
