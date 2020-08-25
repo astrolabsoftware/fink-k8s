@@ -52,4 +52,8 @@ ENV SPARK_HOME /opt/spark
 
 WORKDIR /opt/spark/work-dir
 
+ENV TINI_VERSION v0.19.0
+ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
+RUN chmod +x /tini && mv /tini /sbin/tini
+
 ENTRYPOINT [ "/opt/entrypoint.sh" ]
