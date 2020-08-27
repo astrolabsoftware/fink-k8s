@@ -2,21 +2,28 @@
 
 This repository hosts files and procedure to run [Fink](https://github.com/astrolabsoftware/fink-broker) on Kubernetes.
 
-## Compatibility matrix
+## Compatibility matrix and images
 
-We summarised below the versions that have been tested:
+You can already test Fink on Kubernetes using our [official images](https://hub.docker.com/r/julienpeloton/fink/tags). We summarised below the versions that have been tested:
 
-| Fink version | Spark version | Kubernetes version| Status      |
-|--------------|---------------|-------------------|-------------|
-| 0.7.0        | 2.4.4         | 1.15              | production  |
-| 0.7.0        | 3.0.0         | 1.15              | experimental|
-| 0.7.0        | 3.0.0         | 1.18              | experimental|
+| Fink version | Spark version | Kubernetes version| Image       | Status      |
+|--------------|---------------|-------------------|-------------|-------------|
+| 0.7.0        | 2.4.4         | 1.15              | julienpeloton/fink:0.7.0_2.4.4 | production  |
+| 0.7.0        | 3.0.0         | 1.15              | _not yet available_ | experimental|
+| 0.7.0        | 3.0.0         | 1.18              | _not yet available_ | experimental|
 
-You can try other combinations, but there is no guarantee that it works.
+You can try other combinations, but there is no guarantee that it works. You would simply use:
 
-## Available images
+```bash
+spark-submit --master $MASTERURL \
+     --deploy-mode cluster \
+     --conf spark.kubernetes.container.image=julienpeloton/fink:0.7.0_2.4.4 \
+     $OTHERCONF \
+     /home/fink-broker/bin/stream2raw.py \
+     $ARGS
+```
 
-TBD
+See below for a full example.
 
 ## Kubernetes cluster installation
 
@@ -106,7 +113,8 @@ cd ${SPARK_HOME}
 
 # remove the `-m` option if you are not using minikube
 # use your docker account in -r if you are not using minikube
-./bin/docker-image-tool-fink.sh -m -r test -t pysparkfink -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink build
+# tag contains fink version and spark version used
+./bin/docker-image-tool-fink.sh -m -r test -t 0.7.0_2.4.4 -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink build
 ```
 
 You should end up with an image around 3GB:
@@ -114,14 +122,13 @@ You should end up with an image around 3GB:
 ```bash
 docker image ls
 REPOSITORY                                TAG                 IMAGE ID            CREATED             SIZE
-test/spark-py                             pysparkfink         3fcdf60b3356        35 seconds ago      3.06GB
-test/spark                                pysparkfink         f05eb011c426        12 minutes ago      782MB
+test/fink                                 0.7.0_2.4.4         3fcdf60b3356        35 seconds ago      3.06GB
 ```
 
 We are actively working at reducing the size of the image (most of the size is taken by dependencies). If you want to use this image in production (not with minikube), you need also to push the image:
 
 ```bash
-./bin/docker-image-tool-fink.sh -r <your docker account> -t pysparkfink -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink push
+./bin/docker-image-tool-fink.sh -r <your docker account> -t 0.7.0_2.4.4 -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink push
 ```
 
 ## Examples
@@ -145,7 +152,7 @@ spark-submit --master k8s://https://127.0.0.1:32776 \
      --deploy-mode cluster \
      --conf spark.executor.instances=1 \
      --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark \
-     --conf spark.kubernetes.container.image=test/spark-py:pysparkfink \
+     --conf spark.kubernetes.container.image=test/fink:0.7.0_2.4.4 \
      /home/fink-broker/bin/stream2raw.py \
      -servers xx.xx.xx.xx:port,yy.yy.yy.yy:port \
      -topic a_topic \
@@ -170,6 +177,16 @@ kubectl port-forward <driver-pod-name> 4040:4040
 ```
 
 and then navigate to `http://localhost:4040`.
+
+### Terminating the job
+
+We are running a streaming job, so just hitting CTRl+C will not stop the job (which will continue forever in the pods). To really terminate, you need to delete the master:
+
+```bash
+kubectl delete pod <driver-pod-name>
+```
+
+Beware, if you kill an executor, it will be recreated by Kubernetes.
 
 ### Troubleshooting
 
