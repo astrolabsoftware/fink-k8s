@@ -38,10 +38,8 @@ WORKDIR /home
 RUN git clone https://github.com/astrolabsoftware/fink-broker.git
 
 WORKDIR /home/fink-broker
-#RUN pip install --upgrade pip setuptools wheel \
-#  && pip install -r requirements.txt
-#pyarrow version frozen
-RUN pip install -r requirements.txt --force-reinstall
+
+RUN source ./install_python_deps.sh
 
 ENV FINK_HOME /home/fink-broker
 ENV PYTHONPATH $FINK_HOME:$PYTHONPATH
