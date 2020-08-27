@@ -73,25 +73,18 @@ function build {
   )
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile_fink_base"}
   local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile_fink"}
-  #local RDOCKERFILE=${RDOCKERFILE:-"$IMG_PATH/spark/bindings/R/Dockerfile"}
 
   docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
     -f "$BASEDOCKERFILE" .
 
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-    -t $(image_ref spark-py) \
+    -t $(image_ref fink) \
     -f "$PYDOCKERFILE" .
-
-  #docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-  #  -t $(image_ref spark-r) \
-  #  -f "$RDOCKERFILE" .
 }
 
 function push {
-  docker push "$(image_ref spark)"
-  docker push "$(image_ref spark-py)"
-  #docker push "$(image_ref spark-r)"
+  docker push "$(image_ref fink)"
 }
 
 function usage {
