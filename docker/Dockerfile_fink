@@ -14,13 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG PYTHON_VERSION=py39_4.11.0
-
 ARG base_img
 FROM $base_img
 
-ARG PYTHON_VERSION
-ENV PYTHON_VERSION=$PYTHON_VERSION
+ARG spark_uid=185
+ENV spark_uid=$spark_uid
 
 WORKDIR /
 
@@ -34,26 +32,31 @@ COPY python/lib ${SPARK_HOME}/python/lib
 ENV PYTHONPATH ${SPARK_HOME}/python/lib/pyspark.zip:${SPARK_HOME}/python/lib/py4j-*.zip
 
 # Specify the User that the actual main process will run as
-ARG spark_uid=185
+ENV HOME /home/fink
+RUN mkdir $HOME && chown ${spark_uid} $HOME
+
 USER ${spark_uid}
 
+ARG PYTHON_VERSION=py39_4.11.0
+ENV PYTHON_VERSION=$PYTHON_VERSION
+
 # Install Python
-WORKDIR /
+WORKDIR $HOME
 
 # install python
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${PYTHON_VERSION}-Linux-x86_64.sh -O miniconda.sh \
-&& bash miniconda.sh -b -p miniconda
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${PYTHON_VERSION}-Linux-x86_64.sh -O $HOME/miniconda.sh \
+&& bash $HOME/miniconda.sh -b -p $HOME/miniconda
 
-ENV PATH /miniconda/bin:$PATH
+ENV PATH $HOME/miniconda/bin:$PATH
 
 RUN git clone https://github.com/astrolabsoftware/fink-broker.git
 RUN git clone https://github.com/astrolabsoftware/fink-docker.git
 
-WORKDIR /fink-docker/centos9stream
+WORKDIR $HOME/fink-docker/centos9stream
 
 RUN source ./install_python_deps.sh
 
-ENV FINK_HOME /fink-broker
+ENV FINK_HOME $HOME/fink-broker
 ENV PYTHONPATH $FINK_HOME:$PYTHONPATH
 ENV PATH $FINK_HOME/bin:$PATH
 
