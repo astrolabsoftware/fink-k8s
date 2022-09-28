@@ -113,12 +113,14 @@ cd ${SPARK_HOME}
 ./bin/docker-image-tool-fink.sh -m -r test -t 2.4_3.1.3 -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink build
 ```
 
-You should end up with an image around 3GB:
+You should end up with an image around 6GB:
 
 ```bash
+eval $(minikube docker-env)
 docker images
-REPOSITORY                                TAG         IMAGE ID       CREATED          SIZE
-test/finkk8sdev                           2.4_3.1.3   f9f41cea53df   3 minutes ago    5.96GB
+
+REPOSITORY                                TAG         IMAGE ID       CREATED             SIZE
+test/finkk8sdev                           2.4_3.1.3   373da5b4af53   9 minutes ago       5.99GB
 ```
 
 We are actively working at reducing the size of the image (most of the size is taken by dependencies). If you want to use this image in production (not with minikube), you need also to push the image:
@@ -143,26 +145,32 @@ kubectl cluster-info
 --> Kubernetes master is running at https://127.0.0.1:32776
 --> KubeDNS is running at ...
 
-# submit the job from your computer!
+# submit the job in cluster mode - 1 driver + 1 executor
+KAFKA_IPPORT=#fill me
+KAFKA_TOPIC=#fill me
+FINK_ALERT_SCHEMA=/home/fink/fink-broker/schemas/1628364324215010017.avro
+KAFKA_STARTING_OFFSET=earliest
+ONLINE_DATA_PREFIX=/home/fink/fink-broker/online
+FINK_TRIGGER_UPDATE=2
+LOG_LEVEL=INFO
+
 spark-submit --master k8s://https://127.0.0.1:32776 \
      --deploy-mode cluster \
      --conf spark.executor.instances=1 \
      --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark \
-     --conf spark.kubernetes.container.image=test/fink:2.4_3.1.3 \
-     /home/fink/fink-broker/bin/stream2raw.py \
-     -servers xx.xx.xx.xx:port,yy.yy.yy.yy:port \
-     -topic a_topic \
-     -schema /home/fink/fink-broker/schemas/template_schema_ZTF_3p3.avro \
-     -startingoffsets_stream earliest \
-     -rawdatapath file:///home/fink/fink-broker/raw \
-     -checkpointpath_raw file:///home/fink/fink-broker/raw_checkpoint \
-     -tinterval 2 -log_level INFO
+     --conf spark.kubernetes.container.image=test/finkk8sdev:2.4_3.1.3 \
+     --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/home/fink -Divy.home=/home/fink" \
+     local:///home/fink/fink-broker/bin/stream2raw.py \
+     -servers ${KAFKA_IPPORT} -topic ${KAFKA_TOPIC} \
+    -schema ${FINK_ALERT_SCHEMA} -startingoffsets_stream ${KAFKA_STARTING_OFFSET} \
+    -online_data_prefix ${ONLINE_DATA_PREFIX} \
+    -tinterval ${FINK_TRIGGER_UPDATE} -log_level ${LOG_LEVEL}
 ```
 
 Note:
 
 - Servers are either ZTF/LSST ones (you need extra auth files), or Fink Kafka servers (replayed streams).
-- `rawdatapath`, `checkpointpath_raw` should point to a hdfs (or s3) path in production (otherwise alerts will be collected inside the k8s cluster, and you won't access it!).
+- `online_data_prefix` should point to a hdfs (or s3) path in production (otherwise alerts will be collected inside the k8s cluster, and you won't access it!).
 
 ### Monitoring your job
 
