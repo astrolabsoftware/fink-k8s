@@ -9,7 +9,7 @@ You can already test Fink on Kubernetes using our [official images](https://hub.
 | Fink version | Spark version | Kubernetes version| Image       | Status      |
 |--------------|---------------|-------------------|-------------|-------------|
 | 2.4          | 3.1.3         | 1.18              | julienpeloton/finkk8sdev:2.4_3.1.3 | production  |
-| 0.7.0        | 2.4.4         | 1.15              | julienpeloton/fink:0.7.0_2.4.4 | deprecated  |
+| 0.7.0        | 2.4.4         | 1.20              | julienpeloton/fink:0.7.0_2.4.4 | deprecated  |
 
 You can try other combinations, but there is no guarantee that it works. You would simply use:
 
@@ -36,7 +36,7 @@ First install minikube by following the steps at https://minikube.sigs.k8s.io/do
 minikube start --cpus 4 --memory 7000 --kubernetes-version v1.20.0
 ```
 
-See the compatibility matrix above to set your Kubernetes version correctly. We recommend to run 1.18+ for the moment. If you intend to run Fink with Spark 2.4.x (not recommended), then you need to stick with Kubernetes version 1.15 maximum (see [here](https://issues.apache.org/jira/browse/SPARK-31786) and [there](https://github.com/apache/spark/pull/28625)).
+See the compatibility matrix above to set your Kubernetes version correctly. We recommend to run 1.20+ for the moment. If you intend to run Fink with Spark 2.4.x (not recommended), then you need to stick with Kubernetes version 1.15 maximum (see [here](https://issues.apache.org/jira/browse/SPARK-31786) and [there](https://github.com/apache/spark/pull/28625)).
 
 Note that it is recommended to set at least 4 CPUs and somehow a large fraction of RAM (7GB in this example).
 
