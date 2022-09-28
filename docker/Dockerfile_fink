@@ -14,34 +14,49 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 ARG base_img
 FROM $base_img
+
+ARG spark_uid=185
+ENV spark_uid=$spark_uid
+
 WORKDIR /
+
+# Reset to root to run installation tasks
+USER 0
+
 RUN mkdir ${SPARK_HOME}/python
-RUN apt-get install -y --no-install-recommends wget git apt-transport-https ca-certificates gnupg-agent apt-utils build-essential 
+RUN apt-get install -y --no-install-recommends wget git apt-transport-https ca-certificates gnupg-agent apt-utils build-essential
 
 COPY python/lib ${SPARK_HOME}/python/lib
 ENV PYTHONPATH ${SPARK_HOME}/python/lib/pyspark.zip:${SPARK_HOME}/python/lib/py4j-*.zip
 
+# Specify the User that the actual main process will run as
+ENV HOME /home/fink
+RUN mkdir $HOME && chown ${spark_uid} $HOME
+
+USER ${spark_uid}
+
+ARG PYTHON_VERSION=py39_4.11.0
+ENV PYTHON_VERSION=$PYTHON_VERSION
+
 # Install Python
-WORKDIR /home/anaconda3
+WORKDIR $HOME
 
-# Use python3.7
-# TODO: try updating to python3.8 in the CI
-RUN wget https://repo.continuum.io/miniconda/Miniconda3-py37_4.8.2-Linux-x86_64.sh -O miniconda.sh \
- && bash /home/anaconda3/miniconda.sh -b -p /home/anaconda3/miniconda
+# install python
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${PYTHON_VERSION}-Linux-x86_64.sh -O $HOME/miniconda.sh \
+&& bash $HOME/miniconda.sh -b -p $HOME/miniconda
 
-ENV PATH /home/anaconda3/miniconda/bin:$PATH
+ENV PATH $HOME/miniconda/bin:$PATH
 
-WORKDIR /home
 RUN git clone https://github.com/astrolabsoftware/fink-broker.git
+RUN git clone https://github.com/astrolabsoftware/fink-docker.git
 
-WORKDIR /home/fink-broker
+WORKDIR $HOME/fink-docker/centos9stream
 
 RUN source ./install_python_deps.sh
 
-ENV FINK_HOME /home/fink-broker
+ENV FINK_HOME $HOME/fink-broker
 ENV PYTHONPATH $FINK_HOME:$PYTHONPATH
 ENV PATH $FINK_HOME/bin:$PATH
 

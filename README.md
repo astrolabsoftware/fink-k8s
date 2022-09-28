@@ -8,22 +8,21 @@ You can already test Fink on Kubernetes using our [official images](https://hub.
 
 | Fink version | Spark version | Kubernetes version| Image       | Status      |
 |--------------|---------------|-------------------|-------------|-------------|
-| 0.7.0        | 2.4.4         | 1.15              | julienpeloton/fink:0.7.0_2.4.4 | production  |
-| 0.7.0        | 3.0.0         | 1.15              | _not yet available_ | experimental|
-| 0.7.0        | 3.0.0         | 1.18              | _not yet available_ | experimental|
+| 2.4          | 3.1.3         | 1.18              | julienpeloton/finkk8sdev:2.4_3.1.3 | production  |
+| 0.7.0        | 2.4.4         | 1.15              | julienpeloton/fink:0.7.0_2.4.4 | deprecated  |
 
 You can try other combinations, but there is no guarantee that it works. You would simply use:
 
 ```bash
 spark-submit --master $MASTERURL \
      --deploy-mode cluster \
-     --conf spark.kubernetes.container.image=julienpeloton/fink:0.7.0_2.4.4 \
+     --conf spark.kubernetes.container.image=julienpeloton/finkk8sdev:2.4_3.1.3 \
      $OTHERCONF \
      /home/fink-broker/bin/stream2raw.py \
      $ARGS
 ```
 
-See below for a full example.
+See below for a full working example.
 
 ## Kubernetes cluster installation
 
@@ -31,22 +30,19 @@ Information to install Kubernetes can found in the official documentation. Alter
 
 ### Start a Kubernetes cluster with minikube
 
-First install minikube
+First install minikube by following the steps at https://minikube.sigs.k8s.io/docs/start, and start a Kubernetes cluster:
 
 ```bash
-brew install minikube
+minikube start --cpus 4 --memory 7000 --kubernetes-version v1.20.0
 ```
 
-and start a Kubernetes cluster:
+See the compatibility matrix above to set your Kubernetes version correctly. We recommend to run 1.18+ for the moment. If you intend to run Fink with Spark 2.4.x (not recommended), then you need to stick with Kubernetes version 1.15 maximum (see [here](https://issues.apache.org/jira/browse/SPARK-31786) and [there](https://github.com/apache/spark/pull/28625)).
 
-```bash
-# Spark 2.4.x will not work for k8s version > 1.15
-minikube start --cpus 4 --memory 7000 --kubernetes-version v1.15.0
-```
+Note that it is recommended to set at least 4 CPUs and somehow a large fraction of RAM (7GB in this example).
 
-See the compatibility matrix above to set your Kubernetes version correctly. We recommend to run 1.15.0 anyway for the moment. If you intend to run Fink with Spark 2.4.x, then you need to stick with Kubernetes version 1.15 maximum (see [here](https://issues.apache.org/jira/browse/SPARK-31786) and [there](https://github.com/apache/spark/pull/28625)).
+#### troubleshooting
 
-Note that it is recommended to set at least 4 CPUs and somehow a large fraction of RAM (7GB in this example). 
+On recent Ubuntu (22.04), with latest Docker (20.10+), with a fresh minikube installation, you will need at least kubernetes version 1.20.
 
 ### Manage Pods
 
@@ -65,16 +61,16 @@ fi
 
 ### Download Apache Spark
 
-First, you need to choose the Spark version with which you want to run Fink. See above the compatibility matrix. We recommend to use Spark 2.4.4 for the moment. 
+First, you need to choose the Spark version with which you want to run Fink. See above the compatibility matrix. We recommend to use Spark 3.1.3 for the moment.
 
 Download Spark and untar it in your prefered location:
 
 ```bash
 # Assuming Scala 2.11
-SPARK_VERSION=2.4.4
-wget https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop2.7.tgz .
-tar -xf ./spark-${SPARK_VERSION}-bin-hadoop2.7.tgz
-export SPARK_HOME=${PWD}/spark-${SPARK_VERSION}-bin-hadoop2.7
+SPARK_VERSION=3.1.3
+wget https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.2.tgz .
+tar -xf ./spark-${SPARK_VERSION}-bin-hadoop3.2.tgz
+export SPARK_HOME=${PWD}/spark-${SPARK_VERSION}-bin-hadoop3.2
 ```
 
 ### Install Fink additional files inside Spark
@@ -102,7 +98,7 @@ cp ${FINKKUB}/jars/*.jar ${SPARK_HOME}/jars/
 cp ${FINKKUB}/bin/docker-image-tool-fink.sh ${SPARK_HOME}/bin/
 ```
 
-We have built an image based on `openjdk:8` instead of the official `openjdk:8-alpine` which was not suited for our python environment (we heavily use glibc for example which is not in the alpine version). If you know how to easily build the Fink image using `openjdk:8-alpine`, contact us! Note that we do not release an image for R (not used), but feel free to contact us if you need it.
+We have built an image based on `openjdk:11-jre` instead of the official `openjdk:11-jre-slim` which was not suited for our python environment (we heavily use glibc for example which is not in the alpine version). If you know how to easily build the Fink image using `openjdk:11-jre-slim`, contact us! Note that we do not release an image for R (not used), but feel free to contact us if you need it.
 
 ### Build Fink image
 
@@ -114,21 +110,23 @@ cd ${SPARK_HOME}
 # remove the `-m` option if you are not using minikube
 # use your docker account in -r if you are not using minikube
 # tag contains fink version and spark version used
-./bin/docker-image-tool-fink.sh -m -r test -t 0.7.0_2.4.4 -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink build
+./bin/docker-image-tool-fink.sh -m -r test -t 2.4_3.1.3 -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink build
 ```
 
-You should end up with an image around 3GB:
+You should end up with an image around 6GB:
 
 ```bash
-docker image ls
-REPOSITORY                                TAG                 IMAGE ID            CREATED             SIZE
-test/fink                                 0.7.0_2.4.4         3fcdf60b3356        35 seconds ago      3.06GB
+eval $(minikube docker-env)
+docker images
+
+REPOSITORY                                TAG         IMAGE ID       CREATED             SIZE
+test/finkk8sdev                           2.4_3.1.3   373da5b4af53   9 minutes ago       5.99GB
 ```
 
 We are actively working at reducing the size of the image (most of the size is taken by dependencies). If you want to use this image in production (not with minikube), you need also to push the image:
 
 ```bash
-./bin/docker-image-tool-fink.sh -r <your docker account> -t 0.7.0_2.4.4 -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink push
+./bin/docker-image-tool-fink.sh -r <your docker account> -t 2.4_3.1.3 -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink push
 ```
 
 ## Examples
@@ -147,26 +145,32 @@ kubectl cluster-info
 --> Kubernetes master is running at https://127.0.0.1:32776
 --> KubeDNS is running at ...
 
-# submit the job from your computer!
+# submit the job in cluster mode - 1 driver + 1 executor
+KAFKA_IPPORT=#fill me
+KAFKA_TOPIC=#fill me
+FINK_ALERT_SCHEMA=/home/fink/fink-broker/schemas/1628364324215010017.avro
+KAFKA_STARTING_OFFSET=earliest
+ONLINE_DATA_PREFIX=/home/fink/fink-broker/online
+FINK_TRIGGER_UPDATE=2
+LOG_LEVEL=INFO
+
 spark-submit --master k8s://https://127.0.0.1:32776 \
      --deploy-mode cluster \
      --conf spark.executor.instances=1 \
      --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark \
-     --conf spark.kubernetes.container.image=test/fink:0.7.0_2.4.4 \
-     /home/fink-broker/bin/stream2raw.py \
-     -servers xx.xx.xx.xx:port,yy.yy.yy.yy:port \
-     -topic a_topic \
-     -schema /home/fink-broker/schemas/template_schema_ZTF_3p3.avro \
-     -startingoffsets_stream earliest \
-     -rawdatapath file:///home/fink-broker/raw \
-     -checkpointpath_raw file:///home/fink-broker/raw_checkpoint \
-     -tinterval 2 -log_level INFO
+     --conf spark.kubernetes.container.image=test/finkk8sdev:2.4_3.1.3 \
+     --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/home/fink -Divy.home=/home/fink" \
+     local:///home/fink/fink-broker/bin/stream2raw.py \
+     -servers ${KAFKA_IPPORT} -topic ${KAFKA_TOPIC} \
+    -schema ${FINK_ALERT_SCHEMA} -startingoffsets_stream ${KAFKA_STARTING_OFFSET} \
+    -online_data_prefix ${ONLINE_DATA_PREFIX} \
+    -tinterval ${FINK_TRIGGER_UPDATE} -log_level ${LOG_LEVEL}
 ```
 
 Note:
 
 - Servers are either ZTF/LSST ones (you need extra auth files), or Fink Kafka servers (replayed streams).
-- `rawdatapath`, `checkpointpath_raw` should point to a hdfs (or s3) path in production (otherwise alerts will be collected inside the k8s cluster, and you won't access it!).
+- `online_data_prefix` should point to a hdfs (or s3) path in production (otherwise alerts will be collected inside the k8s cluster, and you won't access it!).
 
 ### Monitoring your job
 
