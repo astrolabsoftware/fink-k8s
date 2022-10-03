@@ -19,13 +19,19 @@
 # This script builds and pushes docker images when run from a release of Spark
 # with Kubernetes support.
 
-function error {
-  echo "$@" 1>&2
-  exit 1
-}
+set -euxo pipefail
+
+SPARK_ENV_LOADED=${SPARK_ENV_LOADED:-}
+SPARK_SCALA_VERSION=${SPARK_SCALA_VERSION:-}
+
+readonly DIR=$(cd "$(dirname "$0")"; pwd -P)
+
+readonly FINKKUB=$(readlink -f "${DIR}/..")
+. $FINKKUB/conf.sh
+. $DIR/include.sh
 
 if [ -z "${SPARK_HOME}" ]; then
-  SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+  error "Found undefined env variable SPARK_HOME"
 fi
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
@@ -164,8 +170,8 @@ function build {
     base_img=$(image_ref spark)
   )
 
-  local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile_fink_base"}
-  local PYDOCKERFILE=${PYDOCKERFILE:-"kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink"}
+  local BASEDOCKERFILE=${BASEDOCKERFILE:-"$SPARK_HOME/kubernetes/dockerfiles/spark/Dockerfile_fink_base"}
+  local PYDOCKERFILE=${PYDOCKERFILE:-"$SPARK_HOME/kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink"}
   local ARCHS=${ARCHS:-"--platform linux/amd64,linux/arm64"}
 
   (cd $(img_ctx_dir base) && docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
@@ -182,21 +188,21 @@ function build {
 
   if [ "${PYDOCKERFILE}" != "false" ]; then
     (cd $(img_ctx_dir pyspark) && docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-      -t $(image_ref finkk8sdev) \
+      -t $(image_ref $FINK_IMAGE_NAME) \
       -f "$PYDOCKERFILE" .)
       if [ $? -ne 0 ]; then
         error "Failed to build PySpark Docker image, please refer to Docker build output for details."
       fi
       if [ "${CROSS_BUILD}" != "false" ]; then
         (cd $(img_ctx_dir pyspark) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" --push \
-          -t $(image_ref finkk8sdev) \
+          -t $(image_ref $FINK_IMAGE_NAME) \
           -f "$PYDOCKERFILE" .)
       fi
   fi
 }
 
 function push {
-  docker_push "finkk8sdev"
+  docker_push "$FINK_IMAGE_NAME"
 }
 
 function usage {
@@ -215,8 +221,6 @@ Options:
                         Skips building PySpark docker image if not specified.
   -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
                         Skips building SparkR docker image if not specified.
-  -r repo               Repository address.
-  -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
   -n                    Build docker image with --no-cache
   -u uid                UID to use in the USER directive to set the user the main Spark process runs as inside the
@@ -262,8 +266,6 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   exit 0
 fi
 
-REPO=
-TAG=
 BASEDOCKERFILE=
 PYDOCKERFILE=
 RDOCKERFILE=
@@ -271,15 +273,13 @@ NOCACHEARG=
 BUILD_PARAMS=
 SPARK_UID=
 CROSS_BUILD="false"
-while getopts f:p:R:mr:t:Xnb:u: option
+while getopts f:p:R:mXnb:u: option
 do
  case "${option}"
  in
  f) BASEDOCKERFILE=$(resolve_file ${OPTARG});;
  p) PYDOCKERFILE=$(resolve_file ${OPTARG});;
  R) RDOCKERFILE=$(resolve_file ${OPTARG});;
- r) REPO=${OPTARG};;
- t) TAG=${OPTARG};;
  n) NOCACHEARG="--no-cache";;
  b) BUILD_PARAMS=${BUILD_PARAMS}" --build-arg "${OPTARG};;
  X) CROSS_BUILD=1;;

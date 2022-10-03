@@ -2,6 +2,15 @@
 
 This repository hosts files and procedure to run [Fink](https://github.com/astrolabsoftware/fink-broker) on Kubernetes.
 
+## Continuous integration for master branch
+
+Build Fink and run Fink integration tests on Kubernetes
+
+| CI       | Status                                                                                                                                                           | Image build  | e2e tests | Documentation generation        | Static code analysis  | Image security scan |
+|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|-----------|---------------------------------|-----------------------|---------------------|
+| GHA      | [![Fink CI](https://github.com/astrolabsoftware/fink-k8s/workflows/CI/badge.svg?branch=master)](https://github.com/astrolabsoftware/fink-k8s/actions?query=workflow%3A"CI") | Yes          | Yes        | No | No                   | Yes                 |
+
+
 ## Compatibility matrix and images
 
 You can already test Fink on Kubernetes using our [official images](https://hub.docker.com/r/julienpeloton/fink/tags). We summarised below the versions that have been tested:
@@ -24,93 +33,79 @@ spark-submit --master $MASTERURL \
 
 See below for a full working example.
 
+## Pre-requisites
+
+Clone the source code:
+
+```bash
+git clone https://github.com/astrolabsoftware/fink-k8s.git
+FINKKUB=$PWD/fink-k8s
+```
+
+All configuration parameters are available in `$PWD/fink-k8s/conf.sh`.
+
 ## Kubernetes cluster installation
 
 Information to install Kubernetes can found in the official documentation. Alternatively for test purposes, you can install minikube and run a local Kubernetes cluster.
 
 ### Start a Kubernetes cluster with minikube
 
-First install minikube by following the steps at https://minikube.sigs.k8s.io/docs/start, and start a Kubernetes cluster:
+Minikube installation (see https://minikube.sigs.k8s.io/docs/start) and startup are performed by the following command:
 
 ```bash
-minikube start --cpus 4 --memory 7000 --kubernetes-version v1.20.0
+# Eventually edit some parameters in the Minikube section of $FINKKUB/conf.sh
+$FINKKUB/bin/run-minikube.sh
 ```
 
-See the compatibility matrix above to set your Kubernetes version correctly. We recommend to run 1.20+ for the moment. If you intend to run Fink with Spark 2.4.x (not recommended), then you need to stick with Kubernetes version 1.15 maximum (see [here](https://issues.apache.org/jira/browse/SPARK-31786) and [there](https://github.com/apache/spark/pull/28625)).
+See the compatibility matrix above to set your Kubernetes version correctly. We recommend to run 1.25+ for the moment. If you intend to run Fink with Spark 2.4.x (not recommended), then you need to stick with Kubernetes version 1.15 maximum (see [here](https://issues.apache.org/jira/browse/SPARK-31786) and [there](https://github.com/apache/spark/pull/28625)).
 
-Note that it is recommended to set at least 4 CPUs and somehow a large fraction of RAM (7GB in this example).
+Note that it is recommended to set at least 4 CPUs and somehow a large fraction of RAM (around 7GB).
 
-#### troubleshooting
+#### Troubleshooting
 
-On recent Ubuntu (22.04), with latest Docker (20.10+), with a fresh minikube installation, you will need at least kubernetes version 1.20.
+On recent Ubuntu (22.04), with latest Docker (20.10+), with a fresh minikube installation, you will need at least Kubernetes version 1.20.
 
 ### Manage Pods
 
 We need to give additional rights to our Kubernetes cluster to manage pods. This is due to Spark’s architecture — we deploy a Spark Driver, which can then create the Spark Executors in pods and then clean them up once the job is done
 
 ```bash
-if ! kubectl get serviceaccount spark; then
-    kubectl create serviceaccount spark
-    kubectl create clusterrolebinding spark-role \
-    	--clusterrole=edit \
-    	--serviceaccount=default:spark --namespace=default
-fi
+# Set RBAC
+# see https://spark.apache.org/docs/latest/running-on-kubernetes.html#rbac
+# This step is performed by ./bin/itest.sh
+kubectl create serviceaccount spark --dry-run=client -o yaml | kubectl apply -f -
+kubectl create clusterrolebinding spark-role --clusterrole=edit --serviceaccount=default:spark \
+  --namespace=default --dry-run=client -o yaml | kubectl apply -f -
 ```
 
 ## Build Fink docker image
 
 ### Download Apache Spark
 
-First, you need to choose the Spark version with which you want to run Fink. See above the compatibility matrix. We recommend to use Spark 3.1.3 for the moment.
+First, you need to choose the Spark version with which you want to run Fink, by setting the `SPARK_VERSION` in `$FINKKUB/conf.sh`. See above the compatibility matrix. We recommend to use Spark 3.1.3 for the moment.
 
-Download Spark and untar it in your prefered location:
+The following command will perform:
+1. Download and untat Spark in your prefered location (set `SPARK_INSTALL_DIR` in `$FINKKUB/conf.sh`)
+2. Install Fink additional files inside Spark
 
 ```bash
 # Assuming Scala 2.11
-SPARK_VERSION=3.1.3
-wget https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.2.tgz .
-tar -xf ./spark-${SPARK_VERSION}-bin-hadoop3.2.tgz
-export SPARK_HOME=${PWD}/spark-${SPARK_VERSION}-bin-hadoop3.2
-```
-
-### Install Fink additional files inside Spark
-
-Clone this repository somewhere on your computer, and register the location:
-
-```bash
-git clone https://github.com/astrolabsoftware/fink-k8s
-export FINKKUB=${PWD}/fink-k8s
-```
-
-Copy Fink files inside your Spark installation:
-
-```bash
-# base Spark image using openjdk:8
-cp ${FINKKUB}/docker/Dockerfile_fink_base ${SPARK_HOME}/kubernetes/dockerfiles/spark
-
-# Fink image
-cp ${FINKKUB}/docker/Dockerfile_fink ${SPARK_HOME}/kubernetes/dockerfiles/spark/bindings/python
-
-# Extra jars for Fink
-cp ${FINKKUB}/jars/*.jar ${SPARK_HOME}/jars/
-
-# Custom launcher
-cp ${FINKKUB}/bin/docker-image-tool-fink.sh ${SPARK_HOME}/bin/
+# Eventually edit some parameters in the Spark section of $FINKKUB/conf.sh
+$FINKKUB/bin/prereq-install.sh
 ```
 
 We have built an image based on `openjdk:11-jre` instead of the official `openjdk:11-jre-slim` which was not suited for our python environment (we heavily use glibc for example which is not in the alpine version). If you know how to easily build the Fink image using `openjdk:11-jre-slim`, contact us! Note that we do not release an image for R (not used), but feel free to contact us if you need it.
 
 ### Build Fink image
 
-To build the image:
+Set your docker account in the `REPO` variable in `$FINKKUB/conf.sh` if you are not using minikube, `TAG` variable contains fink version and spark version used
+
+To build the image run:
 
 ```bash
-cd ${SPARK_HOME}
 
-# remove the `-m` option if you are not using minikube
-# use your docker account in -r if you are not using minikube
-# tag contains fink version and spark version used
-./bin/docker-image-tool-fink.sh -m -r test -t 2.4_3.1.3 -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink build
+# Use the `-m` option only if you are using minikube
+$FINKKUB/bin/docker-image-tool-fink.sh -m
 ```
 
 You should end up with an image around 6GB:
@@ -126,7 +121,7 @@ test/finkk8sdev                           2.4_3.1.3   373da5b4af53   9 minutes a
 We are actively working at reducing the size of the image (most of the size is taken by dependencies). If you want to use this image in production (not with minikube), you need also to push the image:
 
 ```bash
-./bin/docker-image-tool-fink.sh -r <your docker account> -t 2.4_3.1.3 -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile_fink push
+./bin/docker-image-tool-fink.sh push
 ```
 
 ## Examples
@@ -171,6 +166,13 @@ Note:
 
 - Servers are either ZTF/LSST ones (you need extra auth files), or Fink Kafka servers (replayed streams).
 - `online_data_prefix` should point to a hdfs (or s3) path in production (otherwise alerts will be collected inside the k8s cluster, and you won't access it!).
+
+
+You can launch the process above by using:
+```bash
+./bin/itest.sh
+```
+
 
 ### Monitoring your job
 

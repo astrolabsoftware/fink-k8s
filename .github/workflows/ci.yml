@@ -1,0 +1,168 @@
+# Qserv operator CI workflow
+---
+name: "CI"
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+jobs:
+  build:
+    name: Build image
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Declare Version Variables
+        id: vars
+        shell: bash
+        run: |
+          echo "FINK_K8S_IMAGE=$(. ./conf.sh && echo $FINK_K8S_IMAGE)" >> $GITHUB_ENV
+          echo "FINK_K8S_IMAGE=${FINK_K8S_IMAGE}"
+      - name: Install pre-requisites (Spark)
+        run: ./bin/prereq-install.sh
+      - name: Build fink-k8s image
+        run: |
+          ./bin/docker-image-tool-fink.sh build
+      - name: Export fink-k8s image
+        run: |
+          docker images
+          echo "${{ env.FINK_K8S_IMAGE }}"
+          mkdir -p artifacts
+          docker save "${{ env.FINK_K8S_IMAGE }}" > artifacts/fink-k8s-image.tar
+          echo "${{ env.FINK_K8S_IMAGE }}" > artifacts/fink-k8s-image-tag
+      - uses: actions/upload-artifact@v2
+        with:
+          name: docker-artifact
+          path: artifacts
+  itest:
+    name: Run integration tests
+    runs-on: ubuntu-22.04
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Declare Version Variables
+        id: vars
+        shell: bash
+        run: |
+          echo "FINK_K8S_IMAGE=$(. ./conf.sh && echo $FINK_K8S_IMAGE)" >> $GITHUB_ENV
+          echo "FINK_K8S_IMAGE=${FINK_K8S_IMAGE}"
+      - name: Install pre-requisites (spark)
+        run: ./bin/prereq-install.sh
+      - name: Start minikube
+        run: |
+          ./bin/run-minikube.sh
+      - name: Download image
+        uses: actions/download-artifact@v2
+        with:
+          name: docker-artifact
+          path: artifacts
+      - name: Load image in local registry
+        run: |
+          eval $(minikube docker-env)
+          docker load --input artifacts/fink-k8s-image.tar
+          echo "FINK_K8S_IMAGE=$(cat artifacts/artifacts/fink-k8s-image-tag)" >> $GITHUB_ENV
+      - name: Run integration test
+        run: |
+          FINK_K8S_IMAGE="${{ env.FINK_K8S_IMAGE }}"
+          KAFKA_SOCKET="${{ secrets.KAFKA_SOCKET }}"
+          KAFKA_TOPIC="${{ secrets.KAFKA_TOPIC }}"
+          ./bin/itest.sh
+  image-analysis:
+    name: Analyze image
+    runs-on: ubuntu-22.04
+    permissions:
+      security-events: write
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Download image
+        uses: actions/download-artifact@v2
+        with:
+          name: docker-artifact
+          path: artifacts
+      - name: Load image in local registry
+        run: |
+          docker load --input artifacts/fink-k8s-image.tar
+          echo "FINK_K8S_IMAGE=$(cat artifacts/artifacts/fink-k8s-image-tag)" >> $GITHUB_ENV
+      - name: Scan Fink image
+        uses: anchore/scan-action@v3
+        id: scan
+        with:
+          image: "${{ env.FINK_K8S_IMAGE }}"
+          fail-build: false
+      - name: Display SARIF report
+        run: |
+          cat ${{ steps.scan.outputs.sarif }}
+      - name: upload Anchore scan SARIF report
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+  # e2e:
+  #   name: Run e2e tests
+  #   runs-on: ubuntu-22.04
+  #   needs: build
+  #   env:
+  #     GHA_BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v2
+  #     - name: apparmor
+  #       run: |
+  #         set -x
+  #         sudo apt-get remove mysql-server --purge
+  #         sudo apt-get install apparmor-profiles
+  #         sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld
+  #     - name: Download fink-k8s image
+  #       uses: actions/download-artifact@v2
+  #       with:
+  #         name: docker-artifact
+  #         path: artifacts
+  #     - name: Create k8s/kind cluster
+  #       run: |
+  #         git clone --depth 1 -b "k8s-1.21.1-1" --single-branch https://github.com/k8s-school/kind-helper.git
+  #         ./kind-helper/k8s-create.sh -s
+  #     - name: Load container image inside kind
+  #       run: |
+  #         kind load image-archive artifacts/qserv-operator-image.tar
+  #         echo "OP_IMAGE=$(cat artifacts/qserv-operator-image-tag)" >> $GITHUB_ENV
+  #     - run: |
+  #         kubectl get nodes
+  #     - name: Deploy operator
+  #       run: |
+  #         export OP_IMAGE="${{ env.OP_IMAGE }}"
+  #         ./deploy.sh
+  #     - name: Deploy Qserv
+  #       run: kubectl apply -k manifests/base
+  #     - name: Wait for Qserv to start
+  #       run: ./tests/tools/wait-qserv-ready.sh -v
+  #     - name: Run E2E Tests
+  #       run: ./tests/e2e/integration.sh
+  # push:
+  #   name: Push fink-k8s image to public registry
+  #   runs-on: ubuntu-22.04
+  #   needs: e2e
+  #   steps:
+  #     - name: Download qserv-operator image
+  #       uses: actions/download-artifact@v2
+  #       with:
+  #         name: docker-artifact
+  #         path: artifacts
+  #     - name: Load image in local registry
+  #       run: |
+  #         docker load --input artifacts/qserv-operator-image.tar
+  #         echo "IMAGE=$(cat artifacts/qserv-operator-image-tag)" >> $GITHUB_ENV
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v1
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+  #     - name: Push image to Docker Hub
+  #       run: |
+  #         docker push ${{ env.IMAGE }}
