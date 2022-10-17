@@ -29,17 +29,25 @@ export PATH="$SPARK_HOME/bin:$PATH"
 # Build parameters
 # ----------------
 # Repository address
-readonly REPO=local
+readonly REPO="gitlab-registry.in2p3.fr/astrolabsoftware/fink"
 # Tag to apply to the built image, or to identify the image to be pushed
 readonly TAG="2.7_3.1.3"
 readonly FINK_IMAGE_NAME="finkk8sdev"
 # Full image name
 # can be overridden using environment variable "FINK_K8S_IMAGE"
-readonly FINK_K8S_IMAGE=${FINK_K8S_IMAGE:-"$REPO/finkk8sdev:$TAG"}
+readonly FINK_K8S_IMAGE=${FINK_K8S_IMAGE:-"$REPO/$FINK_IMAGE_NAME:$TAG"}
+
+# Kafka cluster parameters
+# ------------------------
+# Name for Kafka cluster
+readonly KAFKA_NS="kafka"
+readonly KAFKA_CLUSTER="kafka-cluster"
 
 
 # Spark job 'stream2raw' parameters
 # ---------------------------------
-KAFKA_SOCKET=${KAFKA_SOCKET:-"128.0.0.1:24499"}
-KAFKA_TOPIC=${KAFKA_TOPIC:-"changemetopicname"}
+# Default values are the ones set in fink-alert-simulator CI environment
+KAFKA_SOCKET=${KAFKA_SOCKET:-"kafka-cluster-kafka-external-bootstrap.kafka:9094"}
+KAFKA_TOPIC=${KAFKA_TOPIC:-"ztf-stream-sim"}
 
+FINK_ALERT_SIMULATOR_DIR="/tmp/fink-alert-simulator"

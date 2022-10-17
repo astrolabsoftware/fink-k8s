@@ -35,6 +35,15 @@ if [ -z "${SPARK_HOME}" ]; then
 fi
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
+# base Spark image using openjdk:8
+cp ${FINKKUB}/docker/Dockerfile_fink_base ${SPARK_HOME}/kubernetes/dockerfiles/spark
+
+# Fink image
+cp ${FINKKUB}/docker/Dockerfile_fink ${SPARK_HOME}/kubernetes/dockerfiles/spark/bindings/python
+
+# Extra jars for Fink
+cp ${FINKKUB}/jars/*.jar ${SPARK_HOME}/jars/
+
 CTX_DIR="$SPARK_HOME/target/tmp/docker"
 
 function is_dev_build {

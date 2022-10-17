@@ -16,27 +16,25 @@
 # limitations under the License.
 #
 
-# Create docker image containing Fink packaged for k8s
+# Launch integration tests for fink-broker
 
 # @author  Fabrice Jammes
 
-set -euo pipefail
+set -euxo pipefail
 
 DIR=$(cd "$(dirname "$0")"; pwd -P)
 
 readonly FINKKUB=$(readlink -f "${DIR}/..")
 . $FINKKUB/conf.sh
 
-# login
-eval $(minikube docker-env)
-
 # submit the job in cluster mode - 1 driver + 1 executor
 PRODUCER="sims"
-FINK_ALERT_SCHEMA="/home/fink/fink-broker/schemas/1628364324215010017.avro"
+FINK_ALERT_SCHEMA="/home/fink/fink-alert-schemas/ztf/ztf_public_20190903.schema.avro"
 KAFKA_STARTING_OFFSET="earliest"
 ONLINE_DATA_PREFIX="/home/fink/fink-broker/online"
 FINK_TRIGGER_UPDATE=2
 LOG_LEVEL="INFO"
+ci=${CI:-false}
 
 # get the apiserver ip
 API_SERVER_URL=$(kubectl -n kube-system get pod -l component=kube-apiserver \
@@ -48,6 +46,11 @@ kubectl create serviceaccount spark --dry-run=client -o yaml | kubectl apply -f 
 kubectl create clusterrolebinding spark-role --clusterrole=edit --serviceaccount=default:spark \
   --namespace=default --dry-run=client -o yaml | kubectl apply -f -
 
+ci_opt=""
+if [ $ci = true ]; then
+  ci_opt="--conf spark.kubernetes.driver.request.cores=0 --conf spark.kubernetes.executor.request.cores=0"
+fi
+
 readonly SPARK_LOG_FILE="/tmp/spark-submit.log"
 echo "Launch Spark job in background (log file: $SPARK_LOG_FILE)"
 spark-submit --master "k8s://https://${API_SERVER_URL}" \
@@ -56,6 +59,7 @@ spark-submit --master "k8s://https://${API_SERVER_URL}" \
     --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark \
     --conf spark.kubernetes.container.image="$FINK_K8S_IMAGE" \
     --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/home/fink -Divy.home=/home/fink" \
+    $ci_opt \
     local:///home/fink/fink-broker/bin/stream2raw.py \
     -producer "${PRODUCER}" \
     -servers "${KAFKA_SOCKET}" -topic "${KAFKA_TOPIC}" \
@@ -64,7 +68,7 @@ spark-submit --master "k8s://https://${API_SERVER_URL}" \
     -tinterval "${FINK_TRIGGER_UPDATE}" -log_level "${LOG_LEVEL}" >& $SPARK_LOG_FILE &
 
 COUNTER=0
-while [ $(kubectl get pod -l spark-role -o go-template='{{printf "%d\n" (len  .items)}}') -ne 2 \
+while [ $(kubectl get pod -l spark-role --field-selector=status.phase==Running -o go-template='{{printf "%d\n" (len  .items)}}') -ne 2 \
   -o $COUNTER -lt 20 ]
 do
   echo "Wait for Spark pods to be created"
@@ -74,6 +78,9 @@ do
   echo "-----------------------------"
   tail -n 30 "$SPARK_LOG_FILE"
   let COUNTER=COUNTER+1
+  echo "Pods:"
+  echo "-----"
+  kubectl get pods
 done
 
 echo "Wait for Spark pods to be running"
@@ -82,6 +89,9 @@ then
   echo "spark-submit logs:"
   echo "------------------"
   cat /tmp/spark-submit.log
+  echo "Pods:"
+  echo "-----"
+  kubectl describe pods -l spark-role
 fi
 
 kubectl describe pods -l "spark-role in (executor, driver)"

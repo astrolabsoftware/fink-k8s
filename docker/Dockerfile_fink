@@ -49,11 +49,14 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${PYTHON_VERSION
 
 ENV PATH $HOME/miniconda/bin:$PATH
 
-# FIXME clone a fixed version instead of master??
 ARG BROKER_VERSION=2.7
 ENV BROKER_VERSION=$BROKER_VERSION
-RUN git clone --depth 1 -b "$BROKER_VERSION" --single-branch https://github.com/astrolabsoftware/fink-broker.git
-RUN git clone https://github.com/astrolabsoftware/fink-docker.git
+RUN git clone -c advice.detachedHead=false --depth 1 -b "$BROKER_VERSION" --single-branch https://github.com/astrolabsoftware/fink-broker.git
+
+RUN git clone -c advice.detachedHead=false --depth 1 -b "latest" --single-branch https://github.com/astrolabsoftware/fink-alert-schemas.git
+# FIXME clone a static version instead of master??
+RUN git clone -c advice.detachedHead=false -b "main" --single-branch https://github.com/astrolabsoftware/fink-docker.git
+RUN cd fink-docker && git checkout 8ea7fedb
 
 WORKDIR $HOME/fink-docker/centos9stream
 

@@ -31,8 +31,8 @@ jobs:
           docker images
           echo "${{ env.FINK_K8S_IMAGE }}"
           mkdir -p artifacts
-          docker save "${{ env.FINK_K8S_IMAGE }}" > artifacts/fink-k8s-image.tar
-          echo "${{ env.FINK_K8S_IMAGE }}" > artifacts/fink-k8s-image-tag
+          docker save "${{ env.FINK_K8S_IMAGE }}" > artifacts/image.tar
+          echo "${{ env.FINK_K8S_IMAGE }}" > artifacts/image-tag
       - uses: actions/upload-artifact@v2
         with:
           name: docker-artifact
@@ -50,28 +50,50 @@ jobs:
         id: vars
         shell: bash
         run: |
-          echo "FINK_K8S_IMAGE=$(. ./conf.sh && echo $FINK_K8S_IMAGE)" >> $GITHUB_ENV
-          echo "FINK_K8S_IMAGE=${FINK_K8S_IMAGE}"
-      - name: Install pre-requisites (spark)
-        run: ./bin/prereq-install.sh
-      - name: Start minikube
+          echo "IMAGE=$(. ./conf.sh && echo $IMAGE)" >> $GITHUB_ENV
+          echo "IMAGE=${IMAGE}"
+          echo "FINK_ALERT_SIMULATOR_DIR=$(. ./conf.sh && echo $FINK_ALERT_SIMULATOR_DIR)" >> $GITHUB_ENV
+      - name: Clone fink-alert-simulator code
+        run: ./bin/clone-fink-alert-simulator.sh
+      - name: Create k8s/kind cluster
         run: |
-          ./bin/run-minikube.sh
+          git clone --depth 1 -b "k8s-1.25.0" --single-branch https://github.com/k8s-school/kind-helper.git
+          ./kind-helper/k8s-create.sh -s
+      - name: Load fink-alert-simulator image inside kind
+        run: |
+          DIR="${{ env.FINK_ALERT_SIMULATOR_DIR }}"
+          .  "${{ env.FINK_ALERT_SIMULATOR_DIR }}"/conf.sh
+          if docker exec -t -- kind-control-plane crictl pull "$IMAGE"; then
+            echo "::notice Succeeded to pull $IMAGE"
+          else
+            echo "::error Failed to pull $IMAGE"
+          fi
       - name: Download image
         uses: actions/download-artifact@v2
         with:
           name: docker-artifact
           path: artifacts
-      - name: Load image in local registry
+      - name: Load container image inside kind
         run: |
-          eval $(minikube docker-env)
-          docker load --input artifacts/fink-k8s-image.tar
-          echo "FINK_K8S_IMAGE=$(cat artifacts/artifacts/fink-k8s-image-tag)" >> $GITHUB_ENV
-      - name: Run integration test
+          kind load image-archive artifacts/image.tar
+          docker exec -- kind-control-plane crictl image
+      - name: Install fink-alert-simulator pre-requisites (argoCD)
         run: |
-          FINK_K8S_IMAGE="${{ env.FINK_K8S_IMAGE }}"
-          KAFKA_SOCKET="${{ secrets.KAFKA_SOCKET }}"
-          KAFKA_TOPIC="${{ secrets.KAFKA_TOPIC }}"
+          "${{ env.FINK_ALERT_SIMULATOR_DIR }}"/prereq-install.sh
+      - name: Install strimzi (kafka-operator)
+        run: ./bin/strimzi-install.sh
+      - name: Setup kafka
+        run: ./bin/strimzi-setup.sh
+      - name: Install fink-broker pre-requisites (Spark)
+        run: ./bin/prereq-install.sh
+      - name: Run fink-alert-simulator
+        run: |
+          "${{ env.FINK_ALERT_SIMULATOR_DIR }}"/argo-submit.sh
+          argo watch @latest
+      # - name: Setup tmate session
+      # uses: mxschmitt/action-tmate@v3
+      - name: Run fink-broker
+        run: |
           ./bin/itest.sh
   image-analysis:
     name: Analyze image
@@ -89,8 +111,8 @@ jobs:
           path: artifacts
       - name: Load image in local registry
         run: |
-          docker load --input artifacts/fink-k8s-image.tar
-          echo "FINK_K8S_IMAGE=$(cat artifacts/artifacts/fink-k8s-image-tag)" >> $GITHUB_ENV
+          docker load --input artifacts/image.tar
+          echo "FINK_K8S_IMAGE=$(cat artifacts/artifacts/image-tag)" >> $GITHUB_ENV
       - name: Scan Fink image
         uses: anchore/scan-action@v3
         id: scan
