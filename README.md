@@ -42,7 +42,7 @@ git clone https://github.com/astrolabsoftware/fink-k8s.git
 FINKKUB=$PWD/fink-k8s
 ```
 
-All configuration parameters are available in `$PWD/fink-k8s/conf.sh`.
+All configuration parameters are available in `$FINKKUB/conf.sh`.
 
 ## Kubernetes cluster installation
 
@@ -105,7 +105,7 @@ To build the image run:
 ```bash
 
 # Use the `-m` option only if you are using minikube
-$FINKKUB/bin/docker-image-tool-fink.sh -m
+$FINKKUB/bin/docker-image-tool-fink.sh -m build
 ```
 
 You should end up with an image around 6GB:

@@ -19,7 +19,7 @@
 # This script builds and pushes docker images when run from a release of Spark
 # with Kubernetes support.
 
-set -euxo pipefail
+set -euo pipefail
 
 SPARK_ENV_LOADED=${SPARK_ENV_LOADED:-}
 SPARK_SCALA_VERSION=${SPARK_SCALA_VERSION:-}
