@@ -1,0 +1,106 @@
+# Qserv operator CI workflow
+---
+name: "CI"
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+jobs:
+  build:
+    name: Build image
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Declare Version Variables
+        id: vars
+        shell: bash
+        run: |
+          echo "FINK_K8S_IMAGE=$(. ./conf.sh && echo $FINK_K8S_IMAGE)" >> $GITHUB_ENV
+          echo "FINK_K8S_IMAGE=${FINK_K8S_IMAGE}"
+      - name: Install pre-requisites (Spark)
+        run: ./bin/prereq-install.sh
+      - name: Build fink-k8s image
+        run: |
+          ./bin/docker-image-tool-fink.sh build
+      - name: Export fink-k8s image
+        run: |
+          docker images
+          echo "${{ env.FINK_K8S_IMAGE }}"
+          mkdir -p artifacts
+          docker save "${{ env.FINK_K8S_IMAGE }}" > artifacts/fink-k8s-image.tar
+          echo "${{ env.FINK_K8S_IMAGE }}" > artifacts/fink-k8s-image-tag
+      - uses: actions/upload-artifact@v2
+        with:
+          name: docker-artifact
+          path: artifacts
+  itest:
+    name: Run integration tests
+    runs-on: ubuntu-22.04
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Declare Version Variables
+        id: vars
+        shell: bash
+        run: |
+          echo "FINK_K8S_IMAGE=$(. ./conf.sh && echo $FINK_K8S_IMAGE)" >> $GITHUB_ENV
+          echo "FINK_K8S_IMAGE=${FINK_K8S_IMAGE}"
+      - name: Install pre-requisites (spark)
+        run: ./bin/prereq-install.sh
+      - name: Start minikube
+        run: |
+          ./bin/run-minikube.sh
+      - name: Download image
+        uses: actions/download-artifact@v2
+        with:
+          name: docker-artifact
+          path: artifacts
+      - name: Load image in local registry
+        run: |
+          eval $(minikube docker-env)
+          docker load --input artifacts/fink-k8s-image.tar
+          echo "FINK_K8S_IMAGE=$(cat artifacts/artifacts/fink-k8s-image-tag)" >> $GITHUB_ENV
+      - name: Run integration test
+        run: |
+          FINK_K8S_IMAGE="${{ env.FINK_K8S_IMAGE }}"
+          KAFKA_SOCKET="${{ secrets.KAFKA_SOCKET }}"
+          KAFKA_TOPIC="${{ secrets.KAFKA_TOPIC }}"
+          ./bin/itest.sh
+  image-analysis:
+    name: Analyze image
+    runs-on: ubuntu-22.04
+    permissions:
+      security-events: write
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Download image
+        uses: actions/download-artifact@v2
+        with:
+          name: docker-artifact
+          path: artifacts
+      - name: Load image in local registry
+        run: |
+          docker load --input artifacts/fink-k8s-image.tar
+          echo "FINK_K8S_IMAGE=$(cat artifacts/artifacts/fink-k8s-image-tag)" >> $GITHUB_ENV
+      - name: Scan Fink image
+        uses: anchore/scan-action@v3
+        id: scan
+        with:
+          image: "${{ env.FINK_K8S_IMAGE }}"
+          fail-build: false
+      - name: Display SARIF report
+        run: |
+          cat ${{ steps.scan.outputs.sarif }}
+      - name: upload Anchore scan SARIF report
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
