@@ -63,7 +63,7 @@ spark-submit --master "k8s://https://${API_SERVER_URL}" \
 
 COUNTER=0
 while [ $(kubectl get pod -l spark-role -o go-template='{{printf "%d\n" (len  .items)}}') -ne 2 \
-  -o COUNTER -lt 20]
+  -o $COUNTER -lt 20 ]
 do
   echo "Wait for Spark pods to be created"
   echo "---------------------------------"
@@ -84,6 +84,7 @@ fi
 
 kubectl describe pods -l "spark-role in (executor, driver)"
 
-kubectl delete pod -l "spark-role in (executor, driver)"
+# TODO a cli option
+# kubectl delete pod -l "spark-role in (executor, driver)"
 
 
