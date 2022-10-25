@@ -143,6 +143,7 @@ kubectl cluster-info
 # submit the job in cluster mode - 1 driver + 1 executor
 KAFKA_IPPORT=#fill me
 KAFKA_TOPIC=#fill me
+PRODUCER=sims
 FINK_ALERT_SCHEMA=/home/fink/fink-broker/schemas/1628364324215010017.avro
 KAFKA_STARTING_OFFSET=earliest
 ONLINE_DATA_PREFIX=/home/fink/fink-broker/online
@@ -156,6 +157,7 @@ spark-submit --master k8s://https://127.0.0.1:32776 \
      --conf spark.kubernetes.container.image=test/finkk8sdev:2.4_3.1.3 \
      --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/home/fink -Divy.home=/home/fink" \
      local:///home/fink/fink-broker/bin/stream2raw.py \
+     -producer ${PRODUCER} \
      -servers ${KAFKA_IPPORT} -topic ${KAFKA_TOPIC} \
     -schema ${FINK_ALERT_SCHEMA} -startingoffsets_stream ${KAFKA_STARTING_OFFSET} \
     -online_data_prefix ${ONLINE_DATA_PREFIX} \

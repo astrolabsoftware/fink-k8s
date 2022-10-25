@@ -31,6 +31,7 @@ readonly FINKKUB=$(readlink -f "${DIR}/..")
 eval $(minikube docker-env)
 
 # submit the job in cluster mode - 1 driver + 1 executor
+PRODUCER="sims"
 FINK_ALERT_SCHEMA="/home/fink/fink-broker/schemas/1628364324215010017.avro"
 KAFKA_STARTING_OFFSET="earliest"
 ONLINE_DATA_PREFIX="/home/fink/fink-broker/online"
@@ -56,6 +57,7 @@ spark-submit --master "k8s://https://${API_SERVER_URL}" \
     --conf spark.kubernetes.container.image="$FINK_K8S_IMAGE" \
     --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/home/fink -Divy.home=/home/fink" \
     local:///home/fink/fink-broker/bin/stream2raw.py \
+    -producer "${PRODUCER}" \
     -servers "${KAFKA_SOCKET}" -topic "${KAFKA_TOPIC}" \
     -schema "${FINK_ALERT_SCHEMA}" -startingoffsets_stream "${KAFKA_STARTING_OFFSET}" \
     -online_data_prefix "${ONLINE_DATA_PREFIX}" \
