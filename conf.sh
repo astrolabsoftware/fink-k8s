@@ -31,7 +31,7 @@ export PATH="$SPARK_HOME/bin:$PATH"
 # Repository address
 readonly REPO=local
 # Tag to apply to the built image, or to identify the image to be pushed
-readonly TAG="2.4_3.1.3"
+readonly TAG="2.7_3.1.3"
 readonly FINK_IMAGE_NAME="finkk8sdev"
 # Full image name
 # can be overridden using environment variable "FINK_K8S_IMAGE"
