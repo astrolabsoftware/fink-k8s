@@ -36,12 +36,3 @@ then
   curl -L "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/${SPARK_ARCHIVE}" -o "${SPARK_INSTALL_DIR}/${SPARK_ARCHIVE}"
   tar -C "$SPARK_INSTALL_DIR" -xf "${SPARK_INSTALL_DIR}/${SPARK_ARCHIVE}"
 fi
-
-# base Spark image using openjdk:8
-cp ${FINKKUB}/docker/Dockerfile_fink_base ${SPARK_HOME}/kubernetes/dockerfiles/spark
-
-# Fink image
-cp ${FINKKUB}/docker/Dockerfile_fink ${SPARK_HOME}/kubernetes/dockerfiles/spark/bindings/python
-
-# Extra jars for Fink
-cp ${FINKKUB}/jars/*.jar ${SPARK_HOME}/jars/

@@ -16,7 +16,7 @@
 # limitations under the License.
 #
 
-# Create docker image containing Fink packaged for k8s
+# Setup Kafka for Fink
 
 # @author  Fabrice Jammes
 
@@ -27,26 +27,15 @@ DIR=$(cd "$(dirname "$0")"; pwd -P)
 readonly  FINKKUB=$(readlink -f "${DIR}/..")
 . $FINKKUB/conf.sh
 
-readonly MINIKUBE_VERSION="v1.27.0"
-if minikube version | grep "minikube version: $MINIKUBE_VERSION" > /dev/null
-then
-  echo "Use existing minikube version==$MINIKUBE_VERSION"
-else
-  echo "Install minikube version==$MINIKUBE_VERSION"
-  curl -Lo /tmp/minikube https://storage.googleapis.com/minikube/releases/$MINIKUBE_VERSION/minikube-linux-amd64
-  chmod +x /tmp/minikube
+cat << EOF | kubectl create -n $KAFKA_NS -f -
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: ztf-stream-sim 
+  labels:
+    strimzi.io/cluster: "$KAFKA_CLUSTER"
+spec:
+  partitions: 3
+  replicas: 1
+EOF
 
-  sudo mkdir -p /usr/local/bin/
-  sudo install /tmp/minikube /usr/local/bin/
-fi
-
-minikube delete
-
-NPROC=$(nproc)
-if [ $NPROC -lt $CPUS ]; then
-  EFFECTIVE_CPUS=$NPROC
-else
-  EFFECTIVE_CPUS=$CPUS
-fi
-
-minikube start --kubernetes-version "$K8S_VERSION" --driver=docker --cpus "$EFFECTIVE_CPUS" --cni=bridge
