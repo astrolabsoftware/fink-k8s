@@ -22,7 +22,7 @@ if git ls-remote --exit-code --heads "$REPO_URL" "$BRANCH"
 then
     FINK_ALERT_SIMULATOR_VERSION="$BRANCH"
 else
-    FINK_ALERT_SIMULATOR_VERSION="main"
+    FINK_ALERT_SIMULATOR_VERSION="master"
 fi
 
 git clone "$REPO_URL" --branch "$FINK_ALERT_SIMULATOR_VERSION" \
